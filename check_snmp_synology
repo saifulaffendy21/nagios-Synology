@@ -6,6 +6,7 @@
 # - Tobias Schenke
 # Modified By:
 # 04.17.2019  Corben Eastman
+# 12.07.2019  Blake Cottington - added additional UPS OIDs/stats, added output for performance data for system temperature and UPS
 #---------------------------------------------------
 # this plugin checks the health of your Synology NAS
 # - System status (Power, Fans)
@@ -46,7 +47,7 @@ power=(powerStatus)
 fan=(systemFanStatus CPUFanStatus)
 disk=(disk disk2)
 raid=(RAID)
-ups=(UpsModel UpsSN UpsStatus UpsLoad UpsBatteryCharge UpsBatteryChargeWarning)
+ups=(UpsModel UpsSN UpsStatus UpsLoad UpsBatteryCharge UpsBatteryChargeWarning UpsBatteryVoltageValue UpsBatteryVoltageNominal UpsBatteryChargeLow UpsBatteryRuntimeValue UpsBatteryRuntimeValueMinutes UpsBatteryRuntimeLow UpsBatteryRuntimeLowMinutes UpsInputVoltageValue UpsInputTransferLow UpsInputTransferHigh UpsOutputVoltageValue)
 checks=()
 
 
@@ -94,7 +95,16 @@ OID_UpsSN="1.3.6.1.4.1.6574.4.1.3.0"
 OID_UpsStatus="1.3.6.1.4.1.6574.4.2.1.0"
 OID_UpsLoad="1.3.6.1.4.1.6574.4.2.12.1.0"
 OID_UpsBatteryCharge="1.3.6.1.4.1.6574.4.3.1.1.0"
+OID_UpsBatteryChargeLow="1.3.6.1.4.1.6574.4.3.1.2.0"
 OID_UpsBatteryChargeWarning="1.3.6.1.4.1.6574.4.3.1.4.0"
+OID_UpsBatteryVoltageValue="1.3.6.1.4.1.6574.4.3.2.1.0"
+OID_UpsBatteryVoltageNominal="1.3.6.1.4.1.6574.4.3.2.2.0"
+OID_UpsBatteryRuntimeValue="1.3.6.1.4.1.6574.4.3.6.1.0"
+OID_UpsBatteryRuntimeLow="1.3.6.1.4.1.6574.4.3.6.2.0"
+OID_UpsInputVoltageValue="1.3.6.1.4.1.6574.4.4.1.1.0"
+OID_UpsInputTransferLow="1.3.6.1.4.1.6574.4.4.2.2.0"
+OID_UpsInputTransferHigh="1.3.6.1.4.1.6574.4.4.2.3.0"
+OID_UpsOutputVoltageValue="1.3.6.1.4.1.6574.4.5.1.1.0"
 
 usage()
 {
@@ -285,16 +295,16 @@ else
         #Check system temperature
         if [ "$temperature" -gt "$warningTemperature" ] ; then
             if [ "$temperature" -gt "$criticalTemperature" ] ; then
-                    temperature="$temperature (CRITICAL)"
+                    temperature=" $temperature (CRITICAL) | synology_temp=$temperature"
                     healthCriticalStatus=1
                     healthString="$healthString, temperature: $temperature "
             else
-                    temperature="$temperature (WARNING)"
+                    temperature=" $temperature (WARNING) | synology_temp=$temperature"
                     healthWarningStatus=1
                     healthString="$healthString, temperature: $temperature "
             fi
         else
-            temperature="$temperature (Normal)"
+            temperature=" $temperature (Normal) | synology_temp=$temperature"
         fi
     fi
 
@@ -424,7 +434,7 @@ else
                           echo "$healthString System Status:		 $systemStatus" ;;
         "version")        echo "DSM Version: $DSMVersion $healthString" ;
                           echo "DSM update:		 $DSMUpgradeAvailable" ;;
-        "temperature")    echo "$healthString Temperature:		  " ;;
+        "temperature")    echo "$healthString Temperature:	$temperature" ;;
         "power")	  echo "$healthString Power Status:		 $powerStatus" ;;
         "fan")            echo "$healthString System Fan Status:	 $systemFanStatus" ;
                           echo "CPU Fan Status:		 $CPUFanStatus" ;;
@@ -438,6 +448,7 @@ else
                           do
                               echo " ${RAIDName[$i]} status:${RAIDStatus[$i]} ${storagePercentUsedString[$i]}" ;
                           done ;;
+        "ups")	  echo "$healthString UPS Status:		 $upsStatus" ;;
     esac
 
 	# Display UPS information
@@ -448,27 +459,62 @@ else
             upsLoad=$(echo "$syno" | grep $OID_UpsLoad | cut -d "=" -f2)
             upsBatteryCharge=$(echo "$syno" | grep $OID_UpsBatteryCharge | cut -d "=" -f2)
             upsBatteryChargeWarning=$(echo "$syno" | grep $OID_UpsBatteryChargeWarning | cut -d "=" -f2)
+            upsBatteryChargeLow=$(echo "$syno" | grep $OID_UpsBatteryChargeLow | cut -d "=" -f2)
+            upsBatteryVoltageValue=$(echo "$syno" | grep $OID_UpsBatteryVoltageValue | cut -d "=" -f2)
+            upsBatteryVoltageNominal=$(echo "$syno" | grep $OID_UpsBatteryVoltageNominal | cut -d "=" -f2)
+            upsBatteryRuntimeValue=$(echo "$syno" | grep $OID_UpsBatteryRuntimeValue | cut -d "=" -f2)
+            upsBatteryRuntimeValueMinutes=$((${upsBatteryRuntimeValue:1}/60))
+            upsBatteryRuntimeValueMinutes=" $upsBatteryRuntimeValueMinutes"
+            upsBatteryRuntimeLow=$(echo "$syno" | grep $OID_UpsBatteryRuntimeLow | cut -d "=" -f2)
+            upsBatteryRuntimeLowMinutes=$((${upsBatteryRuntimeLow:1}/60))
+            upsBatteryRuntimeLowMinutes=" $upsBatteryRuntimeLowMinutes"
+            upsInputVoltageValue=$(echo "$syno" | grep $OID_UpsInputVoltageValue | cut -d "=" -f2)
+            upsInputTransferLow=$(echo "$syno" | grep $OID_UpsInputTransferLow | cut -d "=" -f2)
+            upsInputTransferHigh=$(echo "$syno" | grep $OID_UpsInputTransferHigh | cut -d "=" -f2)
+            upsOutputVoltageValue=$(echo "$syno" | grep $OID_UpsOutputVoltageValue | cut -d "=" -f2)
+            upsPerformanceData=" | UpsLoad=${upsLoad:1} UpsBatteryCharge=${upsBatteryCharge:1} UpsBatteryChargeWarning=${upsBatteryChargeWarning:1} UpsBatteryChargeLow=${upsBatteryChargeLow:1} UpsBatteryVoltageValue=${upsBatteryVoltageValue:1} UpsBatteryVoltageNominal=${upsBatteryVoltageNominal:1} UpsBatteryRuntimeValue=${upsBatteryRuntimeValue:1} UpsBatteryRuntimeValueMinutes=${upsBatteryRuntimeValueMinutes:1} UpsBatteryRuntimeLow=${upsBatteryRuntimeLow:1} UpsBatteryRuntimeLowMinutes=${upsBatteryRuntimeLowMinutes:1} UpsInputVoltageValue=${upsInputVoltageValue:1} UpsInputTransferLow=${upsInputTransferLow:1} UpsInputTransferHigh=${upsInputTransferHigh:1} UpsOutputVoltageValue=${upsOutputVoltageValue:1}"
+
 
 	    echo "UPS:"
 	    echo "  Model:		$upsModel"
 	    echo "  s/n:			$upsSN"
 	    echo "  Status:		$upsStatus"
-	    echo "  Load:			$upsLoad"
-	    echo "  Battery charge:	$upsBatteryCharge"
-	    echo "  Battery charge warning:$upsBatteryChargeWarning"
-	fi
+	    echo "  Load (percentage):			$upsLoad"
+	    echo "  Battery charge (percentage):	$upsBatteryCharge"
+	    echo "  Battery charge warning (percentage):$upsBatteryChargeWarning"
+	    echo "  Battery charge low battery (percentage):$upsBatteryChargeLow"
+	    echo "  Battery voltage:	$upsBatteryVoltageValue"
+	    echo "  Battery voltage nominal:	$upsBatteryVoltageNominal"
+	    echo "  Battery runtime (seconds):	$upsBatteryRuntimeValue"
+	    echo "  Battery runtime (minutes):	$upsBatteryRuntimeValueMinutes"
+	    echo "  Battery runtime low (seconds):	$upsBatteryRuntimeLow"
+	    echo "  Battery runtime low (minutes):	$upsBatteryRuntimeLowMinutes"
+	    echo "  UPS Input value (voltage):	$upsInputVoltageValue"
+	    echo "  UPS Input transfer low (voltage):	$upsInputTransferLow"
+	    echo "  UPS Input transfer high (voltage):	$upsInputTransferHigh"
+	    echo "  UPS Output value (voltage):	$upsOutputVoltageValue"
+	    fi
 	echo "";
 
     if [ "$healthCriticalStatus" = "1" ] ; then
 	echo "CRITICAL - $healthString"
+        if [ "$checkType" = "ups" ] ; then
+        echo $upsPerformanceData
+        fi
 	exit 2
     fi
     if [ "$healthWarningStatus" = "1" ] ; then
 	echo "WARNING - $healthString"
+        if [ "$checkType" = "ups" ] ; then
+        echo $upsPerformanceData
+        fi
 	exit 1
     fi
     if [ "$healthCriticalStatus" = "0" ] && [ "$healthWarningStatus" = "0" ] ; then
 	echo "OK - $healthString is in good health"
+        if [ "$checkType" = "ups" ] ; then
+        echo $upsPerformanceData
+        fi
 	exit 0
     fi
 fi
